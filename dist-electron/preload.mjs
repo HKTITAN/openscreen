@@ -59,5 +59,21 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   getPlatform: () => {
     return electron.ipcRenderer.invoke("get-platform");
+  },
+  // Mouse tracking APIs for auto-zoom feature
+  startMouseTracking: (sourceId, recordingStartTime) => {
+    return electron.ipcRenderer.invoke("start-mouse-tracking", sourceId, recordingStartTime);
+  },
+  stopMouseTracking: () => {
+    return electron.ipcRenderer.invoke("stop-mouse-tracking");
+  },
+  getCursorEvents: () => {
+    return electron.ipcRenderer.invoke("get-cursor-events");
+  },
+  storeCursorEvents: (events, videoFileName) => {
+    return electron.ipcRenderer.invoke("store-cursor-events", events, videoFileName);
+  },
+  loadCursorEvents: (videoPath) => {
+    return electron.ipcRenderer.invoke("load-cursor-events", videoPath);
   }
 });

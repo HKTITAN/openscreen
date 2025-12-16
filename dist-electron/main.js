@@ -1,7 +1,11 @@
+var __defProp = Object.defineProperty;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 import { ipcMain, screen, BrowserWindow, desktopCapturer, shell, app, dialog, nativeImage, Tray, Menu } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { uIOhook } from "uiohook-napi";
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.join(__dirname$1, "..");
 const VITE_DEV_SERVER_URL$1 = process.env["VITE_DEV_SERVER_URL"];
@@ -60,13 +64,16 @@ function createHudOverlayWindow() {
   return win;
 }
 function createEditorWindow() {
+  const isMac = process.platform === "darwin";
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 12, y: 12 },
+    ...isMac && {
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 12, y: 12 }
+    },
     transparent: false,
     resizable: true,
     alwaysOnTop: false,
@@ -123,7 +130,171 @@ function createSourceSelectorWindow() {
   }
   return win;
 }
+class MouseTracker {
+  constructor() {
+    __publicField(this, "isTracking", false);
+    __publicField(this, "events", []);
+    __publicField(this, "config", null);
+    __publicField(this, "displayBounds", null);
+    __publicField(this, "lastMoveTime", 0);
+    __publicField(this, "moveThrottleMs", 8);
+    /**
+     * Handle mouse move events (throttled)
+     */
+    __publicField(this, "handleMouseMove", (e) => {
+      var _a, _b;
+      if (!this.isTracking || !this.config) return;
+      const now = Date.now();
+      if (now - this.lastMoveTime < this.moveThrottleMs) {
+        return;
+      }
+      this.lastMoveTime = now;
+      const { normalizedX, normalizedY } = this.normalizeCoordinates(e.x, e.y);
+      const event = {
+        type: "move",
+        timestamp: this.getTimestamp(),
+        x: e.x,
+        y: e.y,
+        normalizedX,
+        normalizedY
+      };
+      this.events.push(event);
+      (_b = (_a = this.config).onCursorEvent) == null ? void 0 : _b.call(_a, event);
+    });
+    /**
+     * Handle mouse click events
+     */
+    __publicField(this, "handleMouseDown", (e) => {
+      var _a, _b;
+      if (!this.isTracking || !this.config) return;
+      const { normalizedX, normalizedY } = this.normalizeCoordinates(e.x, e.y);
+      const event = {
+        type: "click",
+        timestamp: this.getTimestamp(),
+        x: e.x,
+        y: e.y,
+        normalizedX,
+        normalizedY,
+        button: typeof e.button === "number" ? e.button : void 0
+      };
+      this.events.push(event);
+      (_b = (_a = this.config).onCursorEvent) == null ? void 0 : _b.call(_a, event);
+    });
+    /**
+     * Handle scroll wheel events
+     */
+    __publicField(this, "handleWheel", (e) => {
+      var _a, _b;
+      if (!this.isTracking || !this.config) return;
+      const { normalizedX, normalizedY } = this.normalizeCoordinates(e.x, e.y);
+      const event = {
+        type: "scroll",
+        timestamp: this.getTimestamp(),
+        x: e.x,
+        y: e.y,
+        normalizedX,
+        normalizedY,
+        scrollDelta: e.rotation
+      };
+      this.events.push(event);
+      (_b = (_a = this.config).onCursorEvent) == null ? void 0 : _b.call(_a, event);
+    });
+  }
+  // ~120fps for ultra-smooth cursor tracking
+  /**
+   * Start tracking mouse events
+   */
+  start(config) {
+    if (this.isTracking) {
+      console.warn("Mouse tracker is already running");
+      return;
+    }
+    this.config = config;
+    this.events = [];
+    this.isTracking = true;
+    this.displayBounds = this.getDisplayBoundsForSource(config.sourceId);
+    uIOhook.on("mousemove", this.handleMouseMove);
+    uIOhook.on("mousedown", this.handleMouseDown);
+    uIOhook.on("wheel", this.handleWheel);
+    uIOhook.start();
+    console.log("Mouse tracker started for source:", config.sourceId);
+  }
+  /**
+   * Stop tracking and return all captured events
+   */
+  stop() {
+    if (!this.isTracking) {
+      return [];
+    }
+    uIOhook.off("mousemove", this.handleMouseMove);
+    uIOhook.off("mousedown", this.handleMouseDown);
+    uIOhook.off("wheel", this.handleWheel);
+    try {
+      uIOhook.stop();
+    } catch (e) {
+      console.error("Error stopping uIOhook:", e);
+    }
+    this.isTracking = false;
+    const capturedEvents = [...this.events];
+    this.events = [];
+    this.config = null;
+    this.displayBounds = null;
+    console.log(`Mouse tracker stopped. Captured ${capturedEvents.length} events`);
+    return capturedEvents;
+  }
+  /**
+   * Get the current events without stopping
+   */
+  getEvents() {
+    return [...this.events];
+  }
+  /**
+   * Check if tracker is running
+   */
+  isRunning() {
+    return this.isTracking;
+  }
+  /**
+   * Get display bounds for the given source ID
+   */
+  getDisplayBoundsForSource(sourceId) {
+    const displays = screen.getAllDisplays();
+    if (sourceId.startsWith("screen:")) {
+      const parts = sourceId.split(":");
+      if (parts.length >= 2) {
+        const displayIndex = parseInt(parts[1], 10);
+        const display = displays[displayIndex] || screen.getPrimaryDisplay();
+        return display.bounds;
+      }
+    }
+    const primaryDisplay = screen.getPrimaryDisplay();
+    return primaryDisplay.bounds;
+  }
+  /**
+   * Normalize coordinates to 0-1 range based on display bounds
+   */
+  normalizeCoordinates(x, y) {
+    if (!this.displayBounds) {
+      return { normalizedX: 0.5, normalizedY: 0.5 };
+    }
+    const { x: bx, y: by, width, height } = this.displayBounds;
+    const clampedX = Math.max(bx, Math.min(x, bx + width));
+    const clampedY = Math.max(by, Math.min(y, by + height));
+    const normalizedX = (clampedX - bx) / width;
+    const normalizedY = (clampedY - by) / height;
+    return { normalizedX, normalizedY };
+  }
+  /**
+   * Calculate timestamp relative to recording start
+   */
+  getTimestamp() {
+    if (!this.config) return 0;
+    return Date.now() - this.config.recordingStartTime;
+  }
+}
+const mouseTracker = new MouseTracker();
 let selectedSource = null;
+let currentCursorEvents = [];
 function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, getMainWindow, getSourceSelectorWindow, onRecordingStateChange) {
   ipcMain.handle("get-sources", async (_, opts) => {
     const sources = await desktopCapturer.getSources(opts);
@@ -295,6 +466,57 @@ function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, g
   ipcMain.handle("get-platform", () => {
     return process.platform;
   });
+  ipcMain.handle("start-mouse-tracking", (_, sourceId, recordingStartTime) => {
+    try {
+      currentCursorEvents = [];
+      mouseTracker.start({
+        sourceId,
+        recordingStartTime,
+        onCursorEvent: (event) => {
+          currentCursorEvents.push(event);
+        }
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to start mouse tracking:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+  ipcMain.handle("stop-mouse-tracking", () => {
+    try {
+      const events = mouseTracker.stop();
+      currentCursorEvents = events;
+      return { success: true, events };
+    } catch (error) {
+      console.error("Failed to stop mouse tracking:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+  ipcMain.handle("get-cursor-events", () => {
+    return { success: true, events: currentCursorEvents };
+  });
+  ipcMain.handle("store-cursor-events", async (_, events, videoFileName) => {
+    try {
+      const eventsFileName = videoFileName.replace(/\.(webm|mp4)$/, "-cursor-events.json");
+      const eventsPath = path.join(RECORDINGS_DIR, eventsFileName);
+      await fs.writeFile(eventsPath, JSON.stringify(events, null, 2));
+      return { success: true, path: eventsPath };
+    } catch (error) {
+      console.error("Failed to store cursor events:", error);
+      return { success: false, error: String(error) };
+    }
+  });
+  ipcMain.handle("load-cursor-events", async (_, videoPath) => {
+    try {
+      const eventsPath = videoPath.replace(/\.(webm|mp4)$/, "-cursor-events.json");
+      const data = await fs.readFile(eventsPath, "utf-8");
+      const events = JSON.parse(data);
+      return { success: true, events };
+    } catch (error) {
+      console.log("No cursor events found for video:", videoPath);
+      return { success: false, events: [] };
+    }
+  });
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
@@ -366,9 +588,7 @@ app.on("activate", () => {
 app.whenReady().then(async () => {
   const { ipcMain: ipcMain2 } = await import("electron");
   ipcMain2.on("hud-overlay-close", () => {
-    if (process.platform === "darwin") {
-      app.quit();
-    }
+    app.quit();
   });
   await ensureRecordingsDir();
   registerIpcHandlers(

@@ -14,7 +14,10 @@ export default defineConfig({
         entry: 'electron/main.ts',
         vite: {
           build: {
-
+            rollupOptions: {
+              // Mark native modules as external to prevent bundling
+              external: ['uiohook-napi'],
+            },
           }
         }
       },

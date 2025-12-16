@@ -1,7 +1,7 @@
 import { Application, Container, Sprite, Graphics, BlurFilter, Texture } from 'pixi.js';
 import type { ZoomRegion, CropRegion, AnnotationRegion } from '@/components/video-editor/types';
 import { ZOOM_DEPTH_SCALES } from '@/components/video-editor/types';
-import { findDominantRegion } from '@/components/video-editor/videoPlayback/zoomRegionUtils';
+import { findDominantRegion, interpolateFocusFromKeyframes } from '@/components/video-editor/videoPlayback/zoomRegionUtils';
 import { applyZoomTransform } from '@/components/video-editor/videoPlayback/zoomTransform';
 import { DEFAULT_FOCUS, SMOOTHING_FACTOR, MIN_DELTA } from '@/components/video-editor/videoPlayback/constants';
 import { clampFocusToStage as clampFocusToStageUtil } from '@/components/video-editor/videoPlayback/focusUtils';
@@ -396,7 +396,13 @@ export class FrameRenderer {
 
     if (region && strength > 0) {
       const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-      const regionFocus = this.clampFocusToStage(region.focus, region.depth);
+      
+      // Get focus from keyframes if available, otherwise use static focus
+      const rawFocus = region.focusKeyframes && region.focusKeyframes.length > 1
+        ? interpolateFocusFromKeyframes(region, timeMs)
+        : region.focus;
+      
+      const regionFocus = this.clampFocusToStage(rawFocus, region.depth);
       
       targetScaleFactor = 1 + (zoomScale - 1) * strength;
       targetFocus = {

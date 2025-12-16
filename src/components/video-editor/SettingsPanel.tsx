@@ -7,9 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Block from '@uiw/react-color-block';
-import { Trash2, Download, Crop, X, Bug, Upload, Star } from "lucide-react";
+import { Trash2, Download, Crop, X, Bug, Upload, Star, MousePointer2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType } from "./types";
+import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType, CursorSettings, CursorStyle } from "./types";
+import { CURSOR_STYLE_OPTIONS } from "./types";
 import { CropControl } from "./CropControl";
 import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
@@ -78,6 +79,9 @@ interface SettingsPanelProps {
   onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion['style']>) => void;
   onAnnotationFigureDataChange?: (id: string, figureData: any) => void;
   onAnnotationDelete?: (id: string) => void;
+  cursorSettings?: CursorSettings;
+  onCursorSettingsChange?: (settings: CursorSettings) => void;
+  hasCursorEvents?: boolean;
 }
 
 export default SettingsPanel;
@@ -124,10 +128,14 @@ export function SettingsPanel({
   onAnnotationStyleChange,
   onAnnotationFigureDataChange,
   onAnnotationDelete,
+  cursorSettings,
+  onCursorSettingsChange,
+  hasCursorEvents = false,
 }: SettingsPanelProps) {
   const [wallpaperPaths, setWallpaperPaths] = useState<string[]>([]);
   const [customImages, setCustomImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showCursorSettings, setShowCursorSettings] = useState(false);
 
   useEffect(() => {
     let mounted = true
@@ -145,6 +153,11 @@ export function SettingsPanel({
     '#FF0000', '#FFD700', '#00FF00', '#FFFFFF', '#0000FF', '#FF6B00',
     '#9B59B6', '#E91E63', '#00BCD4', '#FF5722', '#8BC34A', '#FFC107',
     '#34B27B', '#000000', '#607D8B', '#795548',
+  ];
+
+  const cursorColorPalette = [
+    '#FFCC00', '#FF6B6B', '#34B27B', '#3B82F6', '#8B5CF6', '#EC4899',
+    '#FFFFFF', '#000000', '#F97316', '#10B981', '#06B6D4', '#6366F1',
   ];
   
   const [selectedColor, setSelectedColor] = useState('#ADADAD');
@@ -383,6 +396,156 @@ export function SettingsPanel({
           Crop Video
         </Button>
       </div>
+
+      {/* Cursor Settings Section */}
+      {hasCursorEvents && cursorSettings && onCursorSettingsChange && (
+        <div className="mb-4">
+          <Button
+            onClick={() => setShowCursorSettings(!showCursorSettings)}
+            variant="outline"
+            className={cn(
+              "w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white h-9 transition-all",
+              showCursorSettings && "bg-[#34B27B]/10 border-[#34B27B]/30 text-[#34B27B]"
+            )}
+          >
+            <MousePointer2 className="w-4 h-4" />
+            Cursor Settings
+          </Button>
+          
+          {showCursorSettings && (
+            <div className="mt-3 p-3 rounded-xl bg-white/5 border border-white/5 space-y-4">
+              {/* Show Cursor Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-slate-200">Show Cursor</div>
+                <Switch
+                  checked={cursorSettings.visible}
+                  onCheckedChange={(visible) => onCursorSettingsChange({ ...cursorSettings, visible })}
+                  className="data-[state=checked]:bg-[#34B27B]"
+                />
+              </div>
+
+              {cursorSettings.visible && (
+                <>
+                  {/* Cursor Style */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-slate-200">Style</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {CURSOR_STYLE_OPTIONS.map((option) => (
+                        <button
+                          key={option.style}
+                          onClick={() => onCursorSettingsChange({ ...cursorSettings, style: option.style })}
+                          className={cn(
+                            "py-1.5 px-1 rounded-lg text-[9px] font-medium transition-all whitespace-nowrap",
+                            cursorSettings.style === option.style
+                              ? "bg-[#34B27B] text-white"
+                              : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cursor Size */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-slate-200">Size</div>
+                      <span className="text-[10px] text-slate-400 font-mono">{cursorSettings.size}px</span>
+                    </div>
+                    <Slider
+                      value={[cursorSettings.size]}
+                      onValueChange={(values) => onCursorSettingsChange({ ...cursorSettings, size: values[0] })}
+                      min={8}
+                      max={64}
+                      step={1}
+                      className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B]"
+                    />
+                  </div>
+
+                  {/* Cursor Opacity */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-slate-200">Opacity</div>
+                      <span className="text-[10px] text-slate-400 font-mono">{Math.round(cursorSettings.opacity * 100)}%</span>
+                    </div>
+                    <Slider
+                      value={[cursorSettings.opacity]}
+                      onValueChange={(values) => onCursorSettingsChange({ ...cursorSettings, opacity: values[0] })}
+                      min={0.1}
+                      max={1}
+                      step={0.05}
+                      className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B]"
+                    />
+                  </div>
+
+                  {/* Cursor Color - only for non-mouse cursor styles */}
+                  {['circle', 'ring', 'dot'].includes(cursorSettings.style) && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-200">Color</div>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {cursorColorPalette.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => onCursorSettingsChange({ ...cursorSettings, color })}
+                            className={cn(
+                              "w-8 h-8 rounded-lg border-2 transition-all",
+                              cursorSettings.color === color
+                                ? "border-white scale-110 shadow-lg"
+                                : "border-transparent hover:border-white/30 hover:scale-105"
+                            )}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Click Animation Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-medium text-slate-200">Click Animation</div>
+                    <Switch
+                      checked={cursorSettings.showClickAnimation}
+                      onCheckedChange={(showClickAnimation) => onCursorSettingsChange({ ...cursorSettings, showClickAnimation })}
+                      className="data-[state=checked]:bg-[#34B27B]"
+                    />
+                  </div>
+
+                  {/* Click Color */}
+                  {cursorSettings.showClickAnimation && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-200">Click Color</div>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {cursorColorPalette.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => onCursorSettingsChange({ ...cursorSettings, clickColor: color })}
+                            className={cn(
+                              "w-8 h-8 rounded-lg border-2 transition-all",
+                              cursorSettings.clickColor === color
+                                ? "border-white scale-110 shadow-lg"
+                                : "border-transparent hover:border-white/30 hover:scale-105"
+                            )}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview */}
+                  <div className="pt-2 border-t border-white/5">
+                    <div className="text-xs font-medium text-slate-400 mb-2">Preview</div>
+                    <div className="flex items-center justify-center h-16 bg-black/30 rounded-lg">
+                      <CursorPreview settings={cursorSettings} />
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       
       {showCropDropdown && cropRegion && onCropChange && (
         <>
@@ -620,6 +783,144 @@ export function SettingsPanel({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Windows-style cursor SVG (black with white outline) */
+const WindowsCursorPreview = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M5.5 3.21V20.8C5.5 21.11 5.56 21.3 5.68 21.4C5.82 21.5 5.98 21.5 6.18 21.4C6.38 21.3 6.57 21.14 6.76 20.92L10.02 17.12L13.25 21.91C13.48 22.26 13.78 22.35 14.16 22.18C14.34 22.09 14.46 21.97 14.5 21.81C14.56 21.66 14.54 21.5 14.44 21.33L11.12 16.46L16.44 16.24C16.73 16.22 16.94 16.11 17.07 15.93C17.19 15.74 17.21 15.54 17.12 15.31C17.04 15.09 16.87 14.93 16.61 14.83L5.5 3.21Z"
+      fill="black"
+      stroke="white"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Windows-style cursor SVG (white with black outline) */
+const WindowsCursorWhitePreview = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M5.5 3.21V20.8C5.5 21.11 5.56 21.3 5.68 21.4C5.82 21.5 5.98 21.5 6.18 21.4C6.38 21.3 6.57 21.14 6.76 20.92L10.02 17.12L13.25 21.91C13.48 22.26 13.78 22.35 14.16 22.18C14.34 22.09 14.46 21.97 14.5 21.81C14.56 21.66 14.54 21.5 14.44 21.33L11.12 16.46L16.44 16.24C16.73 16.22 16.94 16.11 17.07 15.93C17.19 15.74 17.21 15.54 17.12 15.31C17.04 15.09 16.87 14.93 16.61 14.83L5.5 3.21Z"
+      fill="white"
+      stroke="black"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Mac-style cursor SVG (black with white outline) */
+const MacCursorPreview = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4 2L4 19.5L8.5 15L12.5 22L15 21L11 14L17 14L4 2Z"
+      fill="black"
+      stroke="white"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Mac-style cursor SVG (white with black outline) */
+const MacCursorWhitePreview = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M4 2L4 19.5L8.5 15L12.5 22L15 21L11 14L17 14L4 2Z"
+      fill="white"
+      stroke="black"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Preview component for cursor settings */
+function CursorPreview({ settings }: { settings: CursorSettings }) {
+  const { size, color, style, opacity } = settings;
+  
+  const renderCursor = () => {
+    const baseStyle: React.CSSProperties = {
+      opacity,
+      transition: 'all 0.2s ease-out',
+    };
+
+    switch (style) {
+      case 'windows':
+        return (
+          <div style={baseStyle}>
+            <WindowsCursorPreview size={size} />
+          </div>
+        );
+      case 'windows-white':
+        return (
+          <div style={baseStyle}>
+            <WindowsCursorWhitePreview size={size} />
+          </div>
+        );
+      case 'mac':
+        return (
+          <div style={baseStyle}>
+            <MacCursorPreview size={size} />
+          </div>
+        );
+      case 'mac-white':
+        return (
+          <div style={baseStyle}>
+            <MacCursorWhitePreview size={size} />
+          </div>
+        );
+      case 'circle':
+        return (
+          <div
+            style={{
+              ...baseStyle,
+              width: size,
+              height: size,
+              backgroundColor: color,
+              borderRadius: '50%',
+              boxShadow: `0 0 ${size / 2}px ${color}40`,
+            }}
+          />
+        );
+      case 'ring':
+        return (
+          <div
+            style={{
+              ...baseStyle,
+              width: size,
+              height: size,
+              border: `${Math.max(2, size / 8)}px solid ${color}`,
+              borderRadius: '50%',
+              boxShadow: `0 0 ${size / 3}px ${color}40`,
+            }}
+          />
+        );
+      case 'dot':
+        return (
+          <div
+            style={{
+              ...baseStyle,
+              width: size / 2,
+              height: size / 2,
+              backgroundColor: color,
+              borderRadius: '50%',
+              boxShadow: `0 0 ${size / 2}px ${color}60`,
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center">
+      {renderCursor()}
     </div>
   );
 }

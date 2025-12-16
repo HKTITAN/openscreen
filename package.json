@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "build:mac": "tsc && vite build && electron-builder --mac",
     "build:win": "tsc && vite build && electron-builder --win",
-    "build:linux": "tsc && vite build && electron-builder --linux"
+    "build:linux": "tsc && vite build && electron-builder --linux",
+    "rebuild": "electron-rebuild -f -w uiohook-napi",
+    "postinstall": "electron-rebuild -f -w uiohook-napi"
   },
   "dependencies": {
     "@fix-webm-duration/fix": "^1.0.1",
@@ -46,6 +48,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "uiohook-napi": "^1.5.4",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

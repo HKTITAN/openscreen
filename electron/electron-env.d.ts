@@ -21,6 +21,18 @@ declare namespace NodeJS {
   }
 }
 
+// Cursor event types for auto-zoom feature
+interface CursorEvent {
+  type: 'move' | 'click' | 'scroll'
+  timestamp: number // ms since recording start
+  x: number // screen x coordinate
+  y: number // screen y coordinate
+  normalizedX: number // 0-1 normalized to recorded display
+  normalizedY: number // 0-1 normalized to recorded display
+  button?: number // 1 = left, 2 = right, 3 = middle
+  scrollDelta?: number // for scroll events
+}
+
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   electronAPI: {
@@ -42,6 +54,13 @@ interface Window {
     getPlatform: () => Promise<string>
     hudOverlayHide: () => void;
     hudOverlayClose: () => void;
+    getAssetBasePath: () => Promise<string | null>
+    // Mouse tracking APIs for auto-zoom feature
+    startMouseTracking: (sourceId: string, recordingStartTime: number) => Promise<{ success: boolean; error?: string }>
+    stopMouseTracking: () => Promise<{ success: boolean; events?: CursorEvent[]; error?: string }>
+    getCursorEvents: () => Promise<{ success: boolean; events: CursorEvent[] }>
+    storeCursorEvents: (events: CursorEvent[], videoFileName: string) => Promise<{ success: boolean; path?: string; error?: string }>
+    loadCursorEvents: (videoPath: string) => Promise<{ success: boolean; events: CursorEvent[] }>
   }
 }
 

@@ -5,12 +5,22 @@ export interface ZoomFocus {
   cy: number; // normalized vertical center (0-1)
 }
 
+/** A keyframe for animating focus during a zoom region */
+export interface ZoomFocusKeyframe {
+  /** Time offset from zoom start in milliseconds */
+  timeOffsetMs: number;
+  /** Focus point at this keyframe */
+  focus: ZoomFocus;
+}
+
 export interface ZoomRegion {
   id: string;
   startMs: number;
   endMs: number;
   depth: ZoomDepth;
   focus: ZoomFocus;
+  /** Optional keyframes for animated focus that follows cursor movement */
+  focusKeyframes?: ZoomFocusKeyframe[];
 }
 
 export interface TrimRegion {
@@ -92,7 +102,46 @@ export const DEFAULT_FIGURE_DATA: FigureData = {
   strokeWidth: 4,
 };
 
+/** Cursor display style options */
+export type CursorStyle = 'windows' | 'windows-white' | 'mac' | 'mac-white' | 'circle' | 'ring' | 'dot';
 
+/** Settings for cursor visualization during playback */
+export interface CursorSettings {
+  /** Whether to show cursor indicator */
+  visible: boolean;
+  /** Size of the cursor indicator in pixels */
+  size: number;
+  /** Color of the cursor indicator (for non-system cursors) */
+  color: string;
+  /** Style of the cursor indicator */
+  style: CursorStyle;
+  /** Opacity of the cursor (0-1) */
+  opacity: number;
+  /** Whether to show click animations */
+  showClickAnimation: boolean;
+  /** Click animation color */
+  clickColor: string;
+}
+
+export const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
+  visible: true,
+  size: 32,
+  color: '#FFFFFF',
+  style: 'windows',
+  opacity: 1,
+  showClickAnimation: true,
+  clickColor: '#34B27B',
+};
+
+export const CURSOR_STYLE_OPTIONS: Array<{ style: CursorStyle; label: string }> = [
+  { style: 'windows', label: 'Windows' },
+  { style: 'windows-white', label: 'Win White' },
+  { style: 'mac', label: 'Mac' },
+  { style: 'mac-white', label: 'Mac White' },
+  { style: 'circle', label: 'Circle' },
+  { style: 'ring', label: 'Ring' },
+  { style: 'dot', label: 'Dot' },
+];
 
 export interface CropRegion {
   x: number; 

@@ -20,6 +20,7 @@ import {
   DEFAULT_ANNOTATION_SIZE,
   DEFAULT_ANNOTATION_STYLE,
   DEFAULT_FIGURE_DATA,
+  DEFAULT_CURSOR_SETTINGS,
   type ZoomDepth,
   type ZoomFocus,
   type ZoomRegion,
@@ -27,10 +28,12 @@ import {
   type AnnotationRegion,
   type CropRegion,
   type FigureData,
+  type CursorSettings,
 } from "./types";
 import { VideoExporter, type ExportProgress, type ExportQuality } from "@/lib/exporter";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { getAssetPath } from "@/lib/assetPath";
+import { generateAutoZoomRegions, type CursorEvent } from "@/utils/cursorUtils";
 
 const WALLPAPER_COUNT = 18;
 const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
@@ -61,6 +64,9 @@ export default function VideoEditor() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [exportQuality, setExportQuality] = useState<ExportQuality>('good');
+  const [cursorEvents, setCursorEvents] = useState<CursorEvent[]>([]);
+  const [autoZoomApplied, setAutoZoomApplied] = useState(false);
+  const [cursorSettings, setCursorSettings] = useState<CursorSettings>(DEFAULT_CURSOR_SETTINGS);
 
   const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
   const nextZoomIdRef = useRef(1);
@@ -68,6 +74,7 @@ export default function VideoEditor() {
   const nextAnnotationIdRef = useRef(1);
   const nextAnnotationZIndexRef = useRef(1); // Track z-index for stacking order
   const exporterRef = useRef<VideoExporter | null>(null);
+  const rawVideoPathRef = useRef<string | null>(null);
 
   // Helper to convert file path to proper file:// URL
   const toFileUrl = (filePath: string): string => {
@@ -93,6 +100,20 @@ export default function VideoEditor() {
         if (result.success && result.path) {
           const videoUrl = toFileUrl(result.path);
           setVideoPath(videoUrl);
+          rawVideoPathRef.current = result.path;
+          
+          // Load cursor events for auto-zoom
+          if (window.electronAPI?.loadCursorEvents) {
+            try {
+              const eventsResult = await window.electronAPI.loadCursorEvents(result.path);
+              if (eventsResult.success && eventsResult.events.length > 0) {
+                setCursorEvents(eventsResult.events);
+                console.log(`Loaded ${eventsResult.events.length} cursor events for auto-zoom`);
+              }
+            } catch (err) {
+              console.log('No cursor events found for this video');
+            }
+          }
         } else {
           setError('No video to load. Please record or select a video.');
         }
@@ -104,6 +125,37 @@ export default function VideoEditor() {
     }
     loadVideo();
   }, []);
+
+  // Generate auto-zoom regions when cursor events are loaded and video duration is known
+  useEffect(() => {
+    if (cursorEvents.length > 0 && duration > 0 && !autoZoomApplied) {
+      const { regions, nextIdCounter } = generateAutoZoomRegions(
+        cursorEvents,
+        duration * 1000, // Convert to ms
+        nextZoomIdRef.current,
+        {
+          zoomDepth: 3,
+          zoomDurationMs: 2000,
+          minIntervalMs: 500,
+          keyframeSampleIntervalMs: 100,
+          keyframeMinDistance: 0.02,
+        }
+      );
+      
+      if (regions.length > 0) {
+        setZoomRegions(regions);
+        nextZoomIdRef.current = nextIdCounter;
+        setAutoZoomApplied(true);
+        
+        const clickCount = cursorEvents.filter(e => e.type === 'click').length;
+        const keyframeCount = regions.reduce((sum, r) => sum + (r.focusKeyframes?.length || 0), 0);
+        toast.success(`Auto-generated ${regions.length} zoom regions with cursor following from ${clickCount} clicks`, {
+          duration: 4000,
+        });
+        console.log(`Auto-zoom: ${regions.length} regions, ${keyframeCount} total keyframes`);
+      }
+    }
+  }, [cursorEvents, duration, autoZoomApplied]);
 
   // Initialize default wallpaper with resolved asset path
   useEffect(() => {
@@ -316,7 +368,7 @@ export default function VideoEditor() {
       });
       return updated;
     });
-  }, []);;
+  }, []);
 
   const handleAnnotationTypeChange = useCallback((id: string, type: AnnotationRegion['type']) => {
     setAnnotationRegions((prev) => {
@@ -690,6 +742,8 @@ export default function VideoEditor() {
                       onSelectAnnotation={handleSelectAnnotation}
                       onAnnotationPositionChange={handleAnnotationPositionChange}
                       onAnnotationSizeChange={handleAnnotationSizeChange}
+                      cursorEvents={cursorEvents}
+                      cursorSettings={cursorSettings}
                     />
                   </div>
                 </div>
@@ -779,6 +833,9 @@ export default function VideoEditor() {
           onAnnotationStyleChange={handleAnnotationStyleChange}
           onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
           onAnnotationDelete={handleAnnotationDelete}
+          cursorSettings={cursorSettings}
+          onCursorSettingsChange={setCursorSettings}
+          hasCursorEvents={cursorEvents.length > 0}
         />
       </div>
 

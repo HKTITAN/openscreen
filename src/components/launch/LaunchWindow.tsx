@@ -8,10 +8,11 @@ import { MdMonitor } from "react-icons/md";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { FaFolderMinus } from "react-icons/fa6";
 import { FiMinus, FiX } from "react-icons/fi";
+import { TbZoomScan } from "react-icons/tb";
 import { ContentClamp } from "../ui/content-clamp";
 
 export function LaunchWindow() {
-  const { recording, toggleRecording } = useScreenRecorder();
+  const { recording, toggleRecording, autoZoomEnabled, setAutoZoomEnabled } = useScreenRecorder();
   const [recordingStart, setRecordingStart] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -142,6 +143,23 @@ export function LaunchWindow() {
           )}
         </Button>
         
+
+        <div className="w-px h-6 bg-white/30" />
+
+        {/* Auto-zoom toggle button */}
+        <Button
+          variant="link"
+          size="sm"
+          onClick={() => setAutoZoomEnabled(!autoZoomEnabled)}
+          disabled={recording}
+          className={`gap-1 text-white bg-transparent hover:bg-transparent px-1 text-xs ${styles.electronNoDrag}`}
+          title={autoZoomEnabled ? "Auto-zoom on click: ON" : "Auto-zoom on click: OFF"}
+        >
+          <TbZoomScan 
+            size={16} 
+            className={autoZoomEnabled ? "text-[#34B27B]" : "text-white/50"} 
+          />
+        </Button>
 
         <div className="w-px h-6 bg-white/30" />
 

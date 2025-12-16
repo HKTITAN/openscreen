@@ -1,5 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// Type for cursor events from mouse tracker
+interface CursorEvent {
+  type: 'move' | 'click' | 'scroll'
+  timestamp: number
+  x: number
+  y: number
+  normalizedX: number
+  normalizedY: number
+  button?: number
+  scrollDelta?: number
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
     hudOverlayHide: () => {
       ipcRenderer.send('hud-overlay-hide');
@@ -62,5 +74,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getPlatform: () => {
     return ipcRenderer.invoke('get-platform')
+  },
+  
+  // Mouse tracking APIs for auto-zoom feature
+  startMouseTracking: (sourceId: string, recordingStartTime: number) => {
+    return ipcRenderer.invoke('start-mouse-tracking', sourceId, recordingStartTime)
+  },
+  stopMouseTracking: () => {
+    return ipcRenderer.invoke('stop-mouse-tracking')
+  },
+  getCursorEvents: () => {
+    return ipcRenderer.invoke('get-cursor-events')
+  },
+  storeCursorEvents: (events: CursorEvent[], videoFileName: string) => {
+    return ipcRenderer.invoke('store-cursor-events', events, videoFileName)
+  },
+  loadCursorEvents: (videoPath: string) => {
+    return ipcRenderer.invoke('load-cursor-events', videoPath)
   },
 })

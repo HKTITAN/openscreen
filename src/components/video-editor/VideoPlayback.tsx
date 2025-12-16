@@ -5,7 +5,7 @@ import { Application, Container, Sprite, Graphics, BlurFilter, Texture, VideoSou
 import { ZOOM_DEPTH_SCALES, type ZoomRegion, type ZoomFocus, type ZoomDepth, type TrimRegion, type AnnotationRegion } from "./types";
 import { DEFAULT_FOCUS, SMOOTHING_FACTOR, MIN_DELTA } from "./videoPlayback/constants";
 import { clamp01 } from "./videoPlayback/mathUtils";
-import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
+import { findDominantRegion, interpolateFocusFromKeyframes } from "./videoPlayback/zoomRegionUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
@@ -13,6 +13,9 @@ import { applyZoomTransform } from "./videoPlayback/zoomTransform";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import { type AspectRatio, formatAspectRatioForCSS } from "@/utils/aspectRatioUtils";
 import { AnnotationOverlay } from "./AnnotationOverlay";
+import { CursorOverlay } from "./CursorOverlay";
+import type { CursorSettings } from "./types";
+import type { CursorEvent } from "@/utils/cursorUtils";
 
 interface VideoPlaybackProps {
   videoPath: string;
@@ -41,6 +44,8 @@ interface VideoPlaybackProps {
   onSelectAnnotation?: (id: string | null) => void;
   onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
   onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
+  cursorEvents?: CursorEvent[];
+  cursorSettings?: CursorSettings;
 }
 
 export interface VideoPlaybackRef {
@@ -80,6 +85,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   onSelectAnnotation,
   onAnnotationPositionChange,
   onAnnotationSizeChange,
+  cursorEvents = [],
+  cursorSettings,
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +97,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const timeUpdateAnimationRef = useRef<number | null>(null);
   const [pixiReady, setPixiReady] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoBounds, setVideoBounds] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const focusIndicatorRef = useRef<HTMLDivElement | null>(null);
   const currentTimeRef = useRef(0);
@@ -183,6 +191,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       baseOffsetRef.current = result.baseOffset;
       baseMaskRef.current = result.maskRect;
       cropBoundsRef.current = result.cropBounds;
+      
+      // Update video bounds state for cursor overlay
+      setVideoBounds(result.maskRect);
 
       // Reset camera container to identity
       cameraContainer.scale.set(1);
@@ -626,7 +637,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     };
 
     const ticker = () => {
-      const { region, strength } = findDominantRegion(zoomRegionsRef.current, currentTimeRef.current);
+      const currentTimeMs = currentTimeRef.current;
+      const { region, strength } = findDominantRegion(zoomRegionsRef.current, currentTimeMs);
       
       const defaultFocus = DEFAULT_FOCUS;
       let targetScaleFactor = 1;
@@ -640,7 +652,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
       if (region && strength > 0 && !shouldShowUnzoomedView) {
         const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-        const regionFocus = clampFocusToStage(region.focus, region.depth);
+        
+        // Get focus from keyframes if available, otherwise use static focus
+        const rawFocus = region.focusKeyframes && region.focusKeyframes.length > 1
+          ? interpolateFocusFromKeyframes(region, currentTimeMs)
+          : region.focus;
+        
+        const regionFocus = clampFocusToStage(rawFocus, region.depth);
         
         // Interpolate scale and focus based on region strength
         targetScaleFactor = 1 + (zoomScale - 1) * strength;
@@ -807,6 +825,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
             : 'none',
         }}
       />
+      {/* Cursor overlay - render on top of the video canvas */}
+      {pixiReady && videoReady && cursorSettings?.visible && cursorEvents.length > 0 && videoBounds.width > 0 && (
+        <CursorOverlay
+          cursorEvents={cursorEvents}
+          currentTimeMs={Math.round(currentTime * 1000)}
+          cursorSettings={cursorSettings}
+          containerWidth={containerRef.current?.clientWidth || 800}
+          containerHeight={containerRef.current?.clientHeight || 600}
+          videoBounds={videoBounds}
+        />
+      )}
       {/* Only render overlay after PIXI and video are fully initialized */}
       {pixiReady && videoReady && (
         <div
